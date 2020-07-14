@@ -12,10 +12,13 @@ spec:
       - name: Housekeeping
         type: xlrelease.ScriptTask
         script: |-
-          from datetime import date\n\nif folderVariables['folder.currentChangeTicket'] == "":
-            releaseVariables['changeRequestId'] = \"%s\" % (int(folderVariables['folder.lastChangeTicket']) + 1)
-            folderVariables['folder.currentChangeTicket'] = \"%s\" % releaseVariables['changeRequestId']
+          from datetime import date
+
+          if folderVariables['folder.currentChangeTicket'] == "":
+            releaseVariables['changeRequestId'] = "%s" % (int(folderVariables['folder.lastChangeTicket']) + 1)
+            folderVariables['folder.currentChangeTicket'] = "%s" % releaseVariables['changeRequestId']
             folderVariables['folder.lastChangeTicket'] = "%s" % releaseVariables['changeRequestId']
+            releaseVariables['closeDelivery'] = True
           else:
             releaseVariables['changeRequestId'] = folderVariables['folder.currentChangeTicket']
 
@@ -25,7 +28,11 @@ spec:
           today = date.today()
           title = "Release : %s-%s Release %s" % (releaseVariables['application'], releaseVariables['version'], today )
           print(title)
-          release = getCurrentRelease()\nrelease.title = title
+          release = getCurrentRelease()
+          release.title = title
+          tags = release.tags
+          tags.append( releaseVariables['changeRequestId'] )
+          release.tags = tags
           releaseApi.updateRelease(release)
       - name: Find or Create Delivery
         type: delivery.FindOrCreateDelivery
@@ -92,7 +99,29 @@ spec:
         pattern: delivery-meetup/meetup
       - name: Complete
         type: xlrelease.ScriptTask
+        precondition: ${closeDelivery}
         script: |-
+          import com.xebialabs.xlrelease.api.v1.forms.ReleasesFilters as ReleasesFilters
+          import time
+
+          myFilter = ReleasesFilters()
+          tags = []
+          tags.append( releaseVariables['changeRequestId'] )
+          myFilter.setTags( tags )
+          releaseList = releaseApi.searchReleases( myFilter )
+          myRelease = getCurrentRelease()
+
+          loop = True
+          while loop:
+              count = 0
+              for aRelease in releaseList:
+                  print( "%s is %s" % ( aRelease.title, aRelease.status))
+                  if aRelease.id == myRelease.id and aRelease.status == "IN_PROGRESS":
+                      count = count + 1
+              print("total %s found %s" % (len(releaseList), count))
+              if count < 2:
+                  loop = False
+              time.sleep(5)
           deliveryId = releaseVariables['deliveryId']
 
           myDelivery = deliveryApi.getDelivery( deliveryId )
@@ -139,6 +168,10 @@ spec:
     - type: xlrelease.StringVariable
       key: eventApp
       requiresValue: false
+    - type: xlrelease.BooleanVariable
+      key: closeDelivery
+      requiresValue: false
+      showOnReleaseStart: false
     abortOnFailure: true
     scriptUsername: !value "scriptUserName"
     scriptUserPassword: !value "scriptUserPassword"
