@@ -1,0 +1,13 @@
+.gradle
+.idea
+build
+bin
+.classpath
+.settings
+.project
+.pydevproject
+.DS_*
+supervisord*
+secrets.xlvals
+supervisord.*
+deploy_key
